@@ -1,4 +1,4 @@
 SVfitLFV_standalone
 ===================
 
-stand-alone version of SVfit algorithm for lepton flavor violating Higgs -> e tau and Higgs -> mu tau decays
+SVfit algorithm for Higgs mass reconstruction in lepton flavor violating Higgs -> e tau and Higgs -> mu tau analysis (stand-alone version)

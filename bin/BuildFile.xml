@@ -1,0 +1,5 @@
+<bin   file="testSVfitStandaloneLFV.cc" name="testSVfitStandaloneLFV">
+  <use name="TauAnalysis/SVfitStandaloneLFV"/>
+  <use name="rootcintex"/>
+  <use name="root"/>
+</bin>
