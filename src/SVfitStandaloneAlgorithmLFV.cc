@@ -237,8 +237,8 @@ SVfitStandaloneAlgorithmLFV::integrateVEGAS(const std::string& likelihoodFileNam
   std::vector<double> yErrGraph;
 
   // integrator instance
-  //ROOT::Math::GSLMCIntegrator ig2("vegas", 0., 1.e-6, 2000);
-  ROOT::Math::GSLMCIntegrator ig2("vegas", 0., 1.e-6, 10000);
+  ROOT::Math::GSLMCIntegrator ig2("vegas", 0., 1.e-6, 2000);
+  //ROOT::Math::GSLMCIntegrator ig2("vegas", 0., 1.e-6, 10000);
   ROOT::Math::Functor toIntegrate(&standaloneObjectiveFunctionAdapterLFV_, &ObjectiveFunctionAdapterLFV::Eval, par); 
   standaloneObjectiveFunctionAdapterLFV_.SetPar(par);
   ig2.SetFunction(toIntegrate);
