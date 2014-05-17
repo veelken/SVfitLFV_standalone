@@ -51,11 +51,12 @@ namespace svFitStandalone
     /// static pointer to this (needed for the minuit function calls)
     static const SVfitStandaloneLikelihoodLFV* gSVfitStandaloneLikelihoodLFV;
        
+    /// take resolution on energy and mass of hadronic tau decays into account
+    void shiftVisMassAndPt(bool value, const TH1* lutVisMassRes, const TH1* lutVisPtRes);
+
     /// fit function to be called from outside. Has to be const to be usable by minuit. This function will call the actual 
     /// functions transform and prob internally 
     double prob(const double* x) const;
-    /// same as above but for integration mode.     
-    double probint(const double* x, const double mtt, const int par) const;	
 
     /// return vector of fitted tau leptons, which will be the actual fit result. This function is a subset of transform.
     /// It needs to be factored out though as transform has to be const to be usable by minuit and therefore is not allowed 
@@ -71,8 +72,6 @@ namespace svFitStandalone
     /// transformation from x to xPrime, x are the actual fit parameters, xPrime are the transformed parameters that go into 
     /// the prob function. Has to be const to be usable by minuit.
     const double* transform(double* xPrime, const double* x) const;
-    /// same as above but for integration mode. This function provides the mapping of integration parameters.
-    const double* transformint(double* xPrime, const double* x, const double mtt, const int par) const;
     /// combined likelihood function. The same function os called for fit and integratino mode. Has to be const to be usable 
     /// by minuit/VEGAS/MarkovChain. The additional boolean phiPenalty is added to prevent singularities at the +/-pi boundaries 
     /// of kPhi within the fit parameters (kFitParams). It is only used in fit mode. In integration mode the passed on value 
@@ -84,6 +83,10 @@ namespace svFitStandalone
     MeasuredTauLepton promptLepton_;
     /// measured tau lepton
     MeasuredTauLepton measuredTauLepton_;
+
+    /// resolution on energy and mass of hadronic taus
+    const TH1* lutVisMassRes_;
+    const TH1* lutVisPtRes_;
   };
 }
 

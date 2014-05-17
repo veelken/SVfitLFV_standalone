@@ -10,33 +10,58 @@
 
 namespace svFitStandalone
 {
-  void map_xLFV(const double* x, int nDim, double* x_mapped)
+  void map_xVEGAS_LFV(const double* x, bool isLep, bool shiftVisMassAndPt, double mvis, double mtest, double* x_mapped)
   {
-    if ( nDim == 2 ) {
-      x_mapped[kXFrac] = x[0];
-      x_mapped[kMNuNu] = 0.;
-      x_mapped[kPhi]   = x[1];
-    } else if ( nDim == 3 ) {
-      x_mapped[kXFrac] = x[0];
-      x_mapped[kMNuNu] = x[1];
-      x_mapped[kPhi]   = x[2];
-    } else assert(0);
-    //std::cout << "<map_x>:" << std::endl;
-    //for ( int i = 0; i < 3; ++i ) {
-    //  std::cout << " x_mapped[" << i << "] = " << x_mapped[i] << std::endl;
-    //}
+    double xFrac = TMath::Power(mvis/mtest, 2.);
+    if ( isLep ) {
+      x_mapped[kXFrac]               = xFrac;
+      x_mapped[kMNuNu]               = x[0];
+      x_mapped[kPhi]                 = x[1];
+      x_mapped[kVisMassShifted]      = 0.;
+      x_mapped[kRecTauPtDivGenTauPt] = 0.;
+    } else {
+      x_mapped[kXFrac]                 = xFrac;
+      x_mapped[kMNuNu]                 = 0.;
+      x_mapped[kPhi]                   = x[0];
+      if ( shiftVisMassAndPt ) {
+	x_mapped[kVisMassShifted]      = x[1];
+	x_mapped[kRecTauPtDivGenTauPt] = x[2];
+      }
+    }
+  }
+  
+  void map_xMarkovChain_LFV(const double* x, bool isLep, bool shiftVisMassAndPt, double* x_mapped)
+  {
+    if ( isLep ) {
+      x_mapped[kXFrac]               = x[0];
+      x_mapped[kMNuNu]               = x[1];
+      x_mapped[kPhi]                 = x[2];
+      x_mapped[kVisMassShifted]      = 0.;
+      x_mapped[kRecTauPtDivGenTauPt] = 0.;
+    } else {
+      x_mapped[kXFrac]                 = x[0];
+      x_mapped[kMNuNu]                 = 0.;
+      x_mapped[kPhi]                   = x[1];
+      if ( shiftVisMassAndPt ) {
+	x_mapped[kVisMassShifted]      = x[2];
+	x_mapped[kRecTauPtDivGenTauPt] = x[3];
+      }
+    }
   }
 }
 
 SVfitStandaloneAlgorithmLFV::SVfitStandaloneAlgorithmLFV(const std::vector<svFitStandalone::MeasuredTauLepton>& measuredTauLeptons, const svFitStandalone::Vector& measuredMET, const TMatrixD& covMET, 
 							 unsigned int verbose) 
   : SVfitStandaloneAlgorithm(measuredTauLeptons, measuredMET, covMET, verbose),
+    standaloneObjectiveFunctionAdapterVEGAS_LFV_(0),
     mcObjectiveFunctionAdapterLFV_(0),
     mcPtEtaPhiMassAdapterLFV_(0)
 { 
   // instantiate the combined likelihood
   nllLFV_ = new svFitStandalone::SVfitStandaloneLikelihoodLFV(measuredTauLeptons, measuredMET, covMET, (verbose_ > 2));
   nllStatus_ = nllLFV_->error();
+
+  standaloneObjectiveFunctionAdapterVEGAS_LFV_ = new svFitStandalone::ObjectiveFunctionAdapterVEGAS_LFV();
 }
 
 SVfitStandaloneAlgorithmLFV::~SVfitStandaloneAlgorithmLFV() 
@@ -44,6 +69,7 @@ SVfitStandaloneAlgorithmLFV::~SVfitStandaloneAlgorithmLFV()
   delete nllLFV_;
   delete mcObjectiveFunctionAdapterLFV_;
   delete mcPtEtaPhiMassAdapterLFV_;
+  delete standaloneObjectiveFunctionAdapterVEGAS_LFV_;
 }
 
 void
@@ -56,7 +82,7 @@ SVfitStandaloneAlgorithmLFV::setup()
   }
   if ( verbose_ >= 1 ) {
     std::cout << " --> upper limit of leg1::mNuNu will be set to "; 
-    if ( nllLFV_->measuredTauLepton().decayType() == kHadDecay ) { 
+    if ( nllLFV_->measuredTauLepton().type() == kHadDecay ) { 
       std::cout << "0";
     } else {
       std::cout << (svFitStandalone::tauLeptonMass - TMath::Min(nllLFV_->measuredTauLepton().mass(), 1.5));
@@ -69,7 +95,7 @@ SVfitStandaloneAlgorithmLFV::setup()
     std::string(TString::Format("leg%i::xFrac", 1)).c_str(), 
     0.5, 0.1, 0., 1.);
   // start values for nunuMass
-  if ( nllLFV_->measuredTauLepton().decayType() == kHadDecay ) { 
+  if ( nllLFV_->measuredTauLepton().type() == kHadDecay ) { 
     minimizer_->SetFixedVariable(
       kMNuNu, 
       std::string(TString::Format("leg%i::mNuNu", 1)).c_str(), 
@@ -85,20 +111,48 @@ SVfitStandaloneAlgorithmLFV::setup()
     kPhi, 
     std::string(TString::Format("leg%i::phi", 1)).c_str(), 
     0.0, 0.25);
+  // start values for Pt and mass of visible tau decay products (hadronic tau decays only)
+  if ( nllLFV_->measuredTauLepton().type() == kHadDecay && shiftVisMassAndPt_ ) {
+    minimizer_->SetLimitedVariable(
+      kVisMassShifted, 
+      std::string(TString::Format("leg%i::mVisShift", 1)).c_str(), 
+      0.8, 0.10, svFitStandalone::chargedPionMass, svFitStandalone::tauLeptonMass);
+    minimizer_->SetLimitedVariable(
+      kRecTauPtDivGenTauPt, 
+      std::string(TString::Format("leg%i::tauPtDivGenVisPt", 1)).c_str(), 
+      0., 0.10, -1., +1.5);
+  } else {
+    minimizer_->SetFixedVariable(
+      kVisMassShifted, 
+      std::string(TString::Format("leg%i::mVisShift", 1)).c_str(), 
+      nllLFV_->measuredTauLepton().mass());
+    minimizer_->SetFixedVariable(
+      kRecTauPtDivGenTauPt, 
+      std::string(TString::Format("leg%i::tauPtDivGenVisPt", 1)).c_str(), 
+      0.);
+  }
   // set values corresponding to prompt lepton to constant values
   // (effectively elliminating all parameters corresponding to prompt lepton in the fit)
   minimizer_->SetFixedVariable(
-     kMaxFitParams + kXFrac, 
-     std::string(TString::Format("leg%i::xFrac", 2)).c_str(), 
-     0.); 
+    kMaxFitParams + kXFrac, 
+    std::string(TString::Format("leg%i::xFrac", 2)).c_str(), 
+    0.); 
   minimizer_->SetFixedVariable(
-     kMaxFitParams + kMNuNu, 
-     std::string(TString::Format("leg%i::mNuNu", 2)).c_str(), 
-     0.); 
+    kMaxFitParams + kMNuNu, 
+    std::string(TString::Format("leg%i::mNuNu", 2)).c_str(), 
+    0.); 
   minimizer_->SetFixedVariable(
-     kMaxFitParams + kPhi, 
-     std::string(TString::Format("leg%i::phi", 2)).c_str(), 
-     0.); 
+    kMaxFitParams + kPhi, 
+    std::string(TString::Format("leg%i::phi", 2)).c_str(), 
+    0.); 
+  minimizer_->SetFixedVariable(
+    kMaxFitParams + kVisMassShifted, 
+    std::string(TString::Format("leg%i::mVisShift", 2)).c_str(), 
+    nllLFV_->measuredTauLepton().mass());
+  minimizer_->SetFixedVariable(
+    kMaxFitParams + kRecTauPtDivGenTauPt, 
+    std::string(TString::Format("leg%i::tauPtDivGenVisPt", 2)).c_str(), 
+    0.);
 }
 
 void
@@ -114,7 +168,7 @@ SVfitStandaloneAlgorithmLFV::fit()
   // set verbosity level of minimizer
   minimizer_->SetPrintLevel(-1);
   // setup the function to be called and the dimension of the fit
-  ROOT::Math::Functor toMinimize(standaloneObjectiveFunctionAdapterLFV_, svFitStandalone::kMaxFitParams);
+  ROOT::Math::Functor toMinimize(standaloneObjectiveFunctionAdapterMINUIT_LFV_, svFitStandalone::kMaxFitParams);
   minimizer_->SetFunction(toMinimize); 
   setup();
   minimizer_->SetMaxFunctionCalls(maxObjFunctionCalls_);
@@ -200,35 +254,68 @@ SVfitStandaloneAlgorithmLFV::integrateVEGAS(const std::string& likelihoodFileNam
     clock_->Start("<SVfitStandaloneAlgorithmLFV::integrateVEGAS>");
   }
 
-  double pi = 3.14159265;
-  // number of hadrponic decays
-  int khad = 0;
-  for ( size_t idx = 0; idx < nllLFV_->measuredTauLeptons().size(); ++idx ) {
-    if ( nllLFV_->measuredTauLeptons()[idx].decayType() == kHadDecay ) { 
-      khad++; 
+  // number of parameters for fit
+  int nDim = 0;
+  isLep_ = false;
+  const TH1* lutVisMassRes = 0;
+  const TH1* lutVisPtRes = 0;
+  for ( size_t idx = 0; idx < nll_->measuredTauLeptons().size(); ++idx ) {
+    const MeasuredTauLepton& measuredTauLepton = nll_->measuredTauLeptons()[idx];
+    if ( measuredTauLepton.type() == kHadDecay ) { 
+      if ( measuredTauLepton.decayMode() == 0 ) {
+	lutVisMassRes = lutVisMassResDM0_;
+	lutVisPtRes = lutVisPtResDM0_;
+      } else if ( measuredTauLepton.decayMode() == 1 ) {
+	lutVisMassRes = lutVisMassResDM1_;
+	lutVisPtRes = lutVisPtResDM1_;
+      } else if ( measuredTauLepton.decayMode() == 10 ) {
+	lutVisMassRes = lutVisMassResDM10_;
+	lutVisPtRes = lutVisPtResDM10_;
+      } 
+      if ( shiftVisMassAndPt_ ) nDim = 4;
+      else nDim = 2;
+    } else if ( measuredTauLepton.type() == kLepDecay ) {
+      isLep_ = true;
+      nDim = 3;
     }
   }
-  // number of parameters for fit
-  int par = svFitStandalone::kMaxFitParams - (khad + 1);
-  if ( verbose_ >= 1 ) {
-    std::cout << "par = " << par << std::endl;
-  }
+  nDim -= 1; // xFrac for second tau is fixed by delta function for test mass
+
   /* --------------------------------------------------------------------------------------
      lower and upper bounds for integration. Boundaries are defined for each decay channel
      separately. The order is: 
      
-     - 1dim : hadronic {phihad1}
-     - 2dim : leptonic {nunuMass, philep}
+     - hadronic {phihad1, (masshad1, pthad1)}
+     - leptonic {nunuMass1, philep1}
      
-     xl* defines the lower integation bound, xu* defines the upper integration bound in 
-     the following definitions. 
+     x0* defines the start value for the integration, xl* defines the lower integation bound, 
+     xh* defines the upper integration bound in the following definitions. 
   */
-  double xl1[1] = { -pi };
-  double xu1[1] = {  pi };
-  double xl2[2] = { 0.0, -pi };
-  double xu2[2] = { svFitStandalone::tauLeptonMass, pi };
+  double* x0 = new double[nDim];
+  double* xl = new double[nDim];
+  double* xh = new double[nDim];
+  if ( isLep_ ) {
+    x0[0] = 0.8; 
+    xl[0] = 0.0; 
+    xh[0] = svFitStandalone::tauLeptonMass; 
+    x0[1] = 0.0; 
+    xl[1] = -TMath::Pi(); 
+    xh[1] = +TMath::Pi();
+  } else {
+    x0[0] = 0.0; 
+    xl[0] = -TMath::Pi(); 
+    xh[0] = +TMath::Pi();
+    if ( shiftVisMassAndPt_ ) {
+      x0[1] = 0.8; 
+      xl[1] = svFitStandalone::chargedPionMass; 
+      xh[1] = svFitStandalone::tauLeptonMass; 
+      x0[2] = 0.0; 
+      xl[2] = -1.0; 
+      xh[2] = +1.5;
+    }
+  }
 
-  TH1* histogramMass = makeHistogram("SVfitStandaloneAlgorithmLFV_histogramMass", measuredDiTauSystem().mass()/1.0125, 1.e+4, 1.025);
+  TH1* histogramMass = makeHistogram("SVfitStandaloneAlgorithm_histogramMass", measuredDiTauSystem().mass()/1.0125, 1.e+4, 1.025);
   TH1* histogramMass_density = (TH1*)histogramMass->Clone(Form("%s_density", histogramMass->GetName()));
 
   std::vector<double> xGraph;
@@ -237,29 +324,25 @@ SVfitStandaloneAlgorithmLFV::integrateVEGAS(const std::string& likelihoodFileNam
   std::vector<double> yErrGraph;
 
   // integrator instance
-  ROOT::Math::GSLMCIntegrator ig2("vegas", 0., 1.e-6, 2000);
-  //ROOT::Math::GSLMCIntegrator ig2("vegas", 0., 1.e-6, 10000);
-  ROOT::Math::Functor toIntegrate(&standaloneObjectiveFunctionAdapterLFV_, &ObjectiveFunctionAdapterLFV::Eval, par); 
-  standaloneObjectiveFunctionAdapterLFV_.SetPar(par);
+  ROOT::Math::GSLMCIntegrator ig2("vegas", 0., 1.e-6, 10000);
+  //ROOT::Math::GSLMCIntegrator ig2("vegas", 0., 1.e-6, 2000);
+  ROOT::Math::Functor toIntegrate(standaloneObjectiveFunctionAdapterVEGAS_LFV_, &ObjectiveFunctionAdapterVEGAS_LFV::Eval, nDim); 
+  standaloneObjectiveFunctionAdapterVEGAS_LFV_->SetIsLep(isLep_);
+  standaloneObjectiveFunctionAdapterVEGAS_LFV_->SetShiftVisMassAndPt(shiftVisMassAndPt_);
   ig2.SetFunction(toIntegrate);
   nllLFV_->addDelta(true);
   nllLFV_->addSinTheta(false);
   nllLFV_->addPhiPenalty(false);
+  nllLFV_->shiftVisMassAndPt(shiftVisMassAndPt_, lutVisMassRes, lutVisPtRes);
   int count = 0;
   double pMax = 0.;
-  double mtest = measuredDiTauSystem().mass();
+  double mvis = measuredDiTauSystem().mass();
+  double mtest = mvis*1.0125;
   bool skiphighmasstail = false;
   for ( int i = 0; i < 100 && (!skiphighmasstail); ++i ) {
-    standaloneObjectiveFunctionAdapterLFV_.SetM(mtest);
-    double p = -1.;
-    if ( par == 1 ) {
-      p = ig2.Integral(xl1, xu1);
-    } else if ( par == 2 ) {
-      p = ig2.Integral(xl2, xu2);
-    } else {
-      std::cout << " >> ERROR : there must be one measured lepton + one prompt lepton" << std::endl;
-      assert(0);
-    }
+    standaloneObjectiveFunctionAdapterVEGAS_LFV_->SetMvis(mvis);
+    standaloneObjectiveFunctionAdapterVEGAS_LFV_->SetMtest(mtest);
+    double p = ig2.Integral(xl, xh);
     double pErr = ig2.Error();
     if ( verbose_ >= 2 ) {
       std::cout << "--> scan idx = " << i << ": mtest = " << mtest << ", p = " << p << " +/- " << pErr << " (pMax = " << pMax << ")" << std::endl;
@@ -310,6 +393,10 @@ SVfitStandaloneAlgorithmLFV::integrateVEGAS(const std::string& likelihoodFileNam
     delete likelihoodGraph;
   }
 
+  delete x0;
+  delete xl;
+  delete xh;
+
   if ( verbose_ >= 1 ) {
     clock_->Show("<SVfitStandaloneAlgorithmLFV::integrateVEGAS>");
   }
@@ -348,79 +435,102 @@ SVfitStandaloneAlgorithmLFV::integrateMarkovChain()
     mcObjectiveFunctionAdapterLFV_ = new MCObjectiveFunctionAdapterLFV();
     integrator2_->setIntegrand(*mcObjectiveFunctionAdapterLFV_);
     integrator2_nDim_ = 0;
-    mcPtEtaPhiMassAdapter_ = new MCPtEtaPhiMassAdapterLFV();
+    mcPtEtaPhiMassAdapterLFV_ = new MCPtEtaPhiMassAdapterLFV();
     integrator2_->registerCallBackFunction(*mcPtEtaPhiMassAdapterLFV_);
     isInitialized2_ = true;    
   }
 
-  const double pi = TMath::Pi();
-  // number of hadronic decays
-  int khad = 0;
-  for ( size_t idx = 0; idx < nllLFV_->measuredTauLeptons().size(); ++idx ) {
-    if ( nllLFV_->measuredTauLeptons()[idx].decayType() == kHadDecay ) { 
-      ++khad; 
+  // number of parameters for fit
+  int nDim = 0;
+  isLep_ = false;
+  const TH1* lutVisMassRes = 0;
+  const TH1* lutVisPtRes = 0;
+  for ( size_t idx = 0; idx < nll_->measuredTauLeptons().size(); ++idx ) {
+    const MeasuredTauLepton& measuredTauLepton = nll_->measuredTauLeptons()[idx];
+    if ( measuredTauLepton.type() == kHadDecay ) { 
+      if ( measuredTauLepton.decayMode() == 0 ) {
+	lutVisMassRes = lutVisMassResDM0_;
+	lutVisPtRes = lutVisPtResDM0_;
+      } else if ( measuredTauLepton.decayMode() == 1 ) {
+	lutVisMassRes = lutVisMassResDM1_;
+	lutVisPtRes = lutVisPtResDM1_;
+      } else if ( measuredTauLepton.decayMode() == 10 ) {
+	lutVisMassRes = lutVisMassResDM10_;
+	lutVisPtRes = lutVisPtResDM10_;
+      }	
+      if ( shiftVisMassAndPt_ ) nDim = 4;
+      else nDim = 2;
+    } else if ( measuredTauLepton.type() == kLepDecay ) {
+      isLep_ = true;
+      nDim = 3;
     }
   }
-  // number of parameters for fit
-  int nDim = svFitStandalone::kMaxFitParams - khad;  
+  
   if ( nDim != integrator2_nDim_ ) {
-    mcObjectiveFunctionAdapterLFV_->SetNDim(nDim);
+    mcObjectiveFunctionAdapterLFV_->SetNDim(nDim);    
     integrator2_->setIntegrand(*mcObjectiveFunctionAdapterLFV_);
     mcPtEtaPhiMassAdapterLFV_->SetNDim(nDim);
     integrator2_nDim_ = nDim;
   }
+  mcObjectiveFunctionAdapterLFV_->SetIsLep(isLep_);
+  mcObjectiveFunctionAdapterLFV_->SetShiftVisMassAndPt(shiftVisMassAndPt_);
+  mcPtEtaPhiMassAdapterLFV_->SetIsLep(isLep_);
+  mcPtEtaPhiMassAdapterLFV_->SetShiftVisMassAndPt(shiftVisMassAndPt_);
+  
   /* --------------------------------------------------------------------------------------
      lower and upper bounds for integration. Boundaries are defined for each decay channel
      separately. The order is: 
      
-     - 2dim : hadronic {xhad, phihad}
-     - 3dim : leptonic {xlep, nunuMass, philep}
+     - hadronic {xhad, phihad1, (masshad1, pthad1)}
+     - leptonic {xlep, nunuMass1, philep1}
      
      x0* defines the start value for the integration, xl* defines the lower integation bound, 
-     xu* defines the upper integration bound in the following definitions. 
-     ATTENTION: order matters here! In the semi-leptonic decay the lepton must go first in 
-     the parametrization, as it is first in the definition of integral boundaries. This is
-     the reason why the measuredLeptons are eventually re-ordered in the constructor of 
-     this class before passing them on to SVfitStandaloneLikelihood.
+     xh* defines the upper integration bound in the following definitions. 
   */
-  double x02[2] = { 0.5, 0.0 };
-  double xl2[2] = { 0.0, -pi };
-  double xu2[2] = { 1.0,  pi };
-  double x03[3] = { 0.5, 0.8, 0.0 };
-  double xl3[3] = { 0.0, 0.0, -pi };
-  double xu3[3] = { 1.0, svFitStandalone::tauLeptonMass, pi };
-  xu3[1] = svFitStandalone::tauLeptonMass - TMath::Min(nllLFV_->measuredTauLepton().mass(), 1.6);
-  x03[1] = 0.5*(xl3[1] + xu3[1]);
   std::vector<double> x0(nDim);
   std::vector<double> xl(nDim);
-  std::vector<double> xu(nDim);
-  for ( int i = 0; i < nDim; ++i ) {
-    if ( nDim == 2 ) {
-      x0[i] = x02[i];
-      xl[i] = xl2[i];
-      xu[i] = xu2[i];
-    } else if ( nDim == 3 ) {
-      x0[i] = x03[i];
-      xl[i] = xl3[i];
-      xu[i] = xu3[i];
-    } else {
-      std::cerr << "<SVfitStandaloneAlgorithmLFV>:"
-		<< "Exactly one measured lepton + one prompt lepton required --> ABORTING !!\n";
-      assert(0);
+  std::vector<double> xh(nDim);
+  if ( isLep_ ) {
+    x0[0] = 0.5; 
+    xl[0] = 0.0; 
+    xh[0] = 1.0; 
+    x0[1] = 0.8; 
+    xl[1] = 0.0; 
+    xh[1] = svFitStandalone::tauLeptonMass; 
+    x0[2] = 0.0; 
+    xl[2] = -TMath::Pi(); 
+    xh[2] = +TMath::Pi();
+  } else {
+    x0[0] = 0.5; 
+    xl[0] = 0.0; 
+    xh[0] = 1.0; 
+    x0[1] = 0.0; 
+    xl[1] = -TMath::Pi(); 
+    xh[1] = +TMath::Pi();
+    if ( shiftVisMassAndPt_ ) {
+      x0[2] = 0.8; 
+      xl[2] = svFitStandalone::chargedPionMass; 
+      xh[2] = svFitStandalone::tauLeptonMass; 
+      x0[3] = 0.0; 
+      xl[3] = -1.0; 
+      xh[3] = +1.5;
     }
+  }
+  for ( int i = 0; i < nDim; ++i ) {
     // transform startPosition into interval ]0..1[
     // expected by MarkovChainIntegrator class
-    x0[i] = (x0[i] - xl[i])/(xu[i] - xl[i]);
+    x0[i] = (x0[i] - xl[i])/(xh[i] - xl[i]);
     //std::cout << "x0[" << i << "] = " << x0[i] << std::endl;
   }
   integrator2_->initializeStartPosition_and_Momentum(x0);
   nllLFV_->addDelta(false);
   nllLFV_->addSinTheta(false);
   nllLFV_->addPhiPenalty(false);
+  nllLFV_->shiftVisMassAndPt(shiftVisMassAndPt_, lutVisMassRes, lutVisPtRes);
   double integral = 0.;
   double integralErr = 0.;
   int errorFlag = 0;
-  integrator2_->integrate(xl, xu, integral, integralErr, errorFlag);
+  integrator2_->integrate(xl, xh, integral, integralErr, errorFlag);
   fitStatus_ = errorFlag;
   pt_ = mcPtEtaPhiMassAdapterLFV_->getPt();
   ptUncert_ = mcPtEtaPhiMassAdapterLFV_->getPtUncert();
@@ -436,3 +546,4 @@ SVfitStandaloneAlgorithmLFV::integrateMarkovChain()
     clock_->Show("<SVfitStandaloneAlgorithmLFV::integrateMarkovChain>");
   }
 }
+

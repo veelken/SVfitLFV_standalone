@@ -31,12 +31,11 @@ using svFitStandalone::MeasuredTauLepton;
 
 namespace svFitStandalone
 {
-  class ObjectiveFunctionAdapterLFV
+  class ObjectiveFunctionAdapterMINUIT_LFV
   {
   public:
     // for minuit fit
-    double operator()(const double* x) const // function to be called in "fit" (MINUIT) mode
-                                             // NOTE: return value = -log(likelihood)
+    double operator()(const double* x) const // NOTE: return value = -log(likelihood)
     {
       double prob = SVfitStandaloneLikelihoodLFV::gSVfitStandaloneLikelihoodLFV->prob(x);
       double nll;
@@ -44,38 +43,51 @@ namespace svFitStandalone
       else nll = std::numeric_limits<float>::max();
       return nll;
     }
-    // for VEGAS integration
-    double Eval(const double* x) const // function to be called in "integration" (VEGAS) mode
-                                       // NOTE: return value = likelihood, **not** -log(likelihood)
+  };
+  // for VEGAS integration
+  void map_xVEGAS_LFV(const double*, bool, bool, double, double, double*);
+  class ObjectiveFunctionAdapterVEGAS_LFV
+  {
+  public:
+    double Eval(const double* x) const // NOTE: return value = likelihood, **not** -log(likelihood)
     {
-      double prob = SVfitStandaloneLikelihoodLFV::gSVfitStandaloneLikelihoodLFV->probint(x, mtest, par);      
+      map_xVEGAS_LFV(x, isLep_, shiftVisMassAndPt_, mvis_, mtest_, x_mapped_);     
+      double prob = SVfitStandaloneLikelihoodLFV::gSVfitStandaloneLikelihoodLFV->prob(x_mapped_);      
       if ( TMath::IsNaN(prob) ) prob = 0.;
       return prob;
     }
-    void SetPar(int parr) { par = parr; }
-    void SetM(double m) { mtest = m; }
+    void SetIsLep(bool isLep) { isLep_ = isLep; }
+    void SetShiftVisMassAndPt(bool shiftVisMassAndPt) { shiftVisMassAndPt_ = shiftVisMassAndPt; }
+    void SetMvis(double mvis) { mvis_ = mvis; }
+    void SetMtest(double mtest) { mtest_ = mtest; }
   private:
-    int par;      //final state type
-    double mtest; //current mass hypothesis
+    mutable double x_mapped_[5];
+    bool isLep_;
+    bool shiftVisMassAndPt_;
+    double mvis_;  // mass of visible tau decay products
+    double mtest_; // current mass hypothesis
   };
   // for markov chain integration
-  void map_xLFV(const double*, int, double*);
-  // class definitions for markov chain integration method
+  void map_xMarkovChain_LFV(const double*, bool, bool, double*);
   class MCObjectiveFunctionAdapterLFV : public ROOT::Math::Functor
   {
    public:
+    void SetIsLep(bool isLep) { isLep_ = isLep; }
+    void SetShiftVisMassAndPt(bool shiftVisMassAndPt) { shiftVisMassAndPt_ = shiftVisMassAndPt; }
     void SetNDim(int nDim) { nDim_ = nDim; }
     unsigned int NDim() const { return nDim_; }
    private:
     virtual double DoEval(const double* x) const
     {
-      map_xLFV(x, nDim_, x_mapped_);
+      map_xMarkovChain_LFV(x, isLep_, shiftVisMassAndPt_, x_mapped_);
       double prob = SVfitStandaloneLikelihoodLFV::gSVfitStandaloneLikelihoodLFV->prob(x_mapped_);
       if ( TMath::IsNaN(prob) ) prob = 0.;
       return prob;
     } 
-    mutable double x_mapped_[6];
+    mutable double x_mapped_[5];
     int nDim_;
+    bool isLep_;
+    bool shiftVisMassAndPt_;
   };
   class MCPtEtaPhiMassAdapterLFV : public MCPtEtaPhiMassAdapter
   {
@@ -84,10 +96,11 @@ namespace svFitStandalone
       : MCPtEtaPhiMassAdapter()
     {}
     ~MCPtEtaPhiMassAdapterLFV() {}
+    void SetIsLep(bool isLep) { isLep_ = isLep; }
    private:    
     virtual double DoEval(const double* x) const
     {
-      map_x(x, nDim_, x_mapped_);
+      map_xMarkovChain_LFV(x, isLep_, shiftVisMassAndPt_, x_mapped_);
       SVfitStandaloneLikelihoodLFV::gSVfitStandaloneLikelihoodLFV->results(fittedTauLeptons_, x_mapped_);
       fittedDiTauSystem_ = fittedTauLeptons_[0] + fittedTauLeptons_[1];
       //std::cout << "<MCPtEtaPhiMassAdapterLFV::DoEval>" << std::endl;
@@ -111,8 +124,10 @@ namespace svFitStandalone
     mutable TH1* histogramPhi_density_;
     mutable TH1* histogramMass_;
     mutable TH1* histogramMass_density_;
-    mutable double x_mapped_[6];
+    mutable double x_mapped_[5];
     int nDim_;
+    bool isLep_;
+    bool shiftVisMassAndPt_;
   };
 }
 
@@ -143,7 +158,7 @@ namespace svFitStandalone
    to the tau lepton mass minus the mass of the visible part of the decay (which is itself constraint to values below the tau 
    lepton mass) in the setup function of this class. The parameter xFrac is constraint to values between 0. and 1. in the setup 
    function of this class. The invariant mass of the neutrino system is fixed to be zero for hadronic tau lepton decays as only 
-   one (tau-) neutrino is involved in the decay. The original number of free parameters of 6 is therefore reduced by one for each 
+   one (tau-) neutrino is involved in the decay. The original number of free parameters of 3 is therefore reduced by one for each 
    hadronic tau decay within the resonance. All information about the negative log likelihood is stored in the SVfitStandaloneLikelihood 
    class as defined in the same package. This class interfaces the combined likelihood to the ROOT::Math::Minuit minimization program. 
    It does setup/initialize the fit parameters as defined in interface/SVfitStandaloneLikelihood.h in this package, initializes the 
@@ -204,11 +219,16 @@ class SVfitStandaloneAlgorithmLFV : public SVfitStandaloneAlgorithm
   /// standalone combined likelihood
   svFitStandalone::SVfitStandaloneLikelihoodLFV* nllLFV_;
   /// needed to make the fit function callable from within minuit
-  svFitStandalone::ObjectiveFunctionAdapterLFV standaloneObjectiveFunctionAdapterLFV_;
+  svFitStandalone::ObjectiveFunctionAdapterMINUIT_LFV standaloneObjectiveFunctionAdapterMINUIT_LFV_;
+
+  /// needed for VEGAS integration
+  svFitStandalone::ObjectiveFunctionAdapterVEGAS_LFV* standaloneObjectiveFunctionAdapterVEGAS_LFV_;   
 
   /// needed for markov chain integration
   svFitStandalone::MCObjectiveFunctionAdapterLFV* mcObjectiveFunctionAdapterLFV_;
   svFitStandalone::MCPtEtaPhiMassAdapterLFV* mcPtEtaPhiMassAdapterLFV_;
+
+  bool isLep_;
 };
 
 #endif

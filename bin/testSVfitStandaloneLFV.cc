@@ -42,12 +42,15 @@ void singleEvent()
   double l2Mass =    1.00231;
   double l2En   = TMath::Sqrt(l2Px*l2Px + l2Py*l2Py + l2Pz*l2Pz + l2Mass*l2Mass);
   svFitStandalone::LorentzVector l2(l2Px, l2Py, l2Pz, l2En); // tau_had
+  int l2decayMode = 10;
   std::vector<svFitStandalone::MeasuredTauLepton> measuredTauLeptons;
   measuredTauLeptons.push_back(svFitStandalone::MeasuredTauLepton(svFitStandalone::kPrompt, l1));
-  measuredTauLeptons.push_back(svFitStandalone::MeasuredTauLepton(svFitStandalone::kHadDecay, l2));
+  measuredTauLeptons.push_back(svFitStandalone::MeasuredTauLepton(svFitStandalone::kHadDecay, l2, l2decayMode));
   // define algorithm (set the debug level to 3 for testing)
   SVfitStandaloneAlgorithmLFV algo(measuredTauLeptons, MET, covMET, 2);
   algo.addLogM(false);
+  TFile* inputFile = new TFile("../data/svFitVisMassAndPtResolutionPDF.root");  
+  algo.shiftVisMassAndPt(true, inputFile);
   /* 
      the following lines show how to use the different methods on a single event
   */
@@ -65,6 +68,8 @@ void singleEvent()
     std::cout << "sorry -- status of NLL is not valid [" << algo.isValidSolution() << "]" << std::endl;
   }
   return;
+
+  delete inputFile;
 }
 
 void eventsFromTree(int argc, char* argv[]) 
