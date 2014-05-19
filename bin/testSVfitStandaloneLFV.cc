@@ -35,17 +35,17 @@ void singleEvent()
   double l1Pz   =  -61.7664;
   double l1Mass =    0.105658;
   double l1En   = TMath::Sqrt(l1Px*l1Px + l1Py*l1Py + l1Pz*l1Pz + l1Mass*l1Mass);
-  svFitStandalone::LorentzVector l1(l1Px, l1Py, l1Pz, l1En); // mu
+  svFitStandalone::LorentzVector l1(l1Px, l1Py, l1Pz, l1En); // "prompt" muon (muon originating from LFV Higgs decay directly)
   double l2Px   =   35.0206;
   double l2Py   =    9.57334;
   double l2Pz   =    9.49413;
   double l2Mass =    1.00231;
   double l2En   = TMath::Sqrt(l2Px*l2Px + l2Py*l2Py + l2Pz*l2Pz + l2Mass*l2Mass);
-  svFitStandalone::LorentzVector l2(l2Px, l2Py, l2Pz, l2En); // tau_had
+  svFitStandalone::LorentzVector l2(l2Px, l2Py, l2Pz, l2En); // tau -> had decay
   int l2decayMode = 10;
   std::vector<svFitStandalone::MeasuredTauLepton> measuredTauLeptons;
   measuredTauLeptons.push_back(svFitStandalone::MeasuredTauLepton(svFitStandalone::kPrompt, l1));
-  measuredTauLeptons.push_back(svFitStandalone::MeasuredTauLepton(svFitStandalone::kHadDecay, l2, l2decayMode));
+  measuredTauLeptons.push_back(svFitStandalone::MeasuredTauLepton(svFitStandalone::kTauToHadDecay, l2, l2decayMode));
   // define algorithm (set the debug level to 3 for testing)
   SVfitStandaloneAlgorithmLFV algo(measuredTauLeptons, MET, covMET, 2);
   algo.addLogM(false);
@@ -63,7 +63,7 @@ void singleEvent()
 
   double mass = algo.getMass(); // return value is in units of GeV
   if ( algo.isValidSolution() ) {
-    std::cout << "found mass = " << mass << " (expected value = 123.037)" << std::endl;
+    std::cout << "found mass = " << mass << " (expected value = 115.68)" << std::endl;
   } else {
     std::cout << "sorry -- status of NLL is not valid [" << algo.isValidSolution() << "]" << std::endl;
   }
@@ -120,10 +120,25 @@ void eventsFromTree(int argc, char* argv[])
     covMET[1][1] = covMet22;
     // setup measure tau lepton vectors 
     svFitStandalone::LorentzVector l1(l1Px, l1Py, l1Pz, TMath::Sqrt(l1M*l1M + l1Px*l1Px + l1Py*l1Py + l1Pz*l1Pz));
-    svFitStandalone::LorentzVector l2(l2Px, l2Py, l2Pz, TMath::Sqrt(l2M*l2M + l2Px*l2Px + l2Py*l2Py + l2Pz*l2Pz));
+    svFitStandalone::LorentzVector l2(l2Px, l2Py, l2Pz, TMath::Sqrt(l2M*l2M + l2Px*l2Px + l2Py*l2Py + l2Pz*l2Pz));    
+    svFitStandalone::kDecayType l1Type, l2Type;
+    if ( std::string(argv[2]) == "EMu" ) {
+      l1Type = svFitStandalone::kPrompt;
+      l2Type = svFitStandalone::kTauToMuDecay;
+    } else if ( std::string(argv[2]) == "MuE" ) {
+      l1Type = svFitStandalone::kPrompt;
+      l2Type = svFitStandalone::kTauToElecDecay;
+    } else if ( std::string(argv[2]) == "MuTau" || std::string(argv[2]) == "ETau" ) {
+      l1Type = svFitStandalone::kPrompt;
+      l2Type = svFitStandalone::kTauToHadDecay;
+    } else {
+      std::cerr << "Error: Invalid channel = " << std::string(argv[2]) << " !!" << std::endl;
+      std::cerr << "(some customization of this code will be needed for your analysis)" << std::endl;
+      assert(0);
+    }
     std::vector<svFitStandalone::MeasuredTauLepton> measuredTauLeptons;
-    measuredTauLeptons.push_back(svFitStandalone::MeasuredTauLepton(std::string(argv[2]) == std::string("EMu") ? svFitStandalone::kLepDecay : svFitStandalone::kLepDecay, l1));
-    measuredTauLeptons.push_back(svFitStandalone::MeasuredTauLepton(std::string(argv[2]) == std::string("EMu") ? svFitStandalone::kLepDecay : svFitStandalone::kHadDecay, l2));
+    measuredTauLeptons.push_back(svFitStandalone::MeasuredTauLepton(l1Type, l1));
+    measuredTauLeptons.push_back(svFitStandalone::MeasuredTauLepton(l2Type, l2));
     // construct the class object from the minimal necesarry information
     SVfitStandaloneAlgorithmLFV algo(measuredTauLeptons, measuredMET, covMET, 1);
     // apply customized configurations if wanted (examples are given below)
