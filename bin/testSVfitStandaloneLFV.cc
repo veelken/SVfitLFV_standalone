@@ -49,7 +49,7 @@ void singleEvent()
   // define algorithm (set the debug level to 3 for testing)
   SVfitStandaloneAlgorithmLFV algo(measuredTauLeptons, MET, covMET, 2);
   algo.addLogM(false);
-  TFile* inputFile = new TFile("../data/svFitVisMassAndPtResolutionPDF.root");  
+  TFile* inputFile = new TFile("../../SVfitStandalone/data/svFitVisMassAndPtResolutionPDF.root");  
   algo.shiftVisMassAndPt(true, inputFile);
   /* 
      the following lines show how to use the different methods on a single event
