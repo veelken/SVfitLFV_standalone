@@ -82,7 +82,7 @@ SVfitStandaloneAlgorithmLFV::setup()
   }
   if ( verbose_ >= 1 ) {
     std::cout << " --> upper limit of leg1::mNuNu will be set to "; 
-    if ( nllLFV_->measuredTauLepton().type() == kHadDecay ) { 
+    if ( nllLFV_->measuredTauLepton().type() == kTauToHadDecay ) { 
       std::cout << "0";
     } else {
       std::cout << (svFitStandalone::tauLeptonMass - TMath::Min(nllLFV_->measuredTauLepton().mass(), 1.5));
@@ -95,7 +95,7 @@ SVfitStandaloneAlgorithmLFV::setup()
     std::string(TString::Format("leg%i::xFrac", 1)).c_str(), 
     0.5, 0.1, 0., 1.);
   // start values for nunuMass
-  if ( nllLFV_->measuredTauLepton().type() == kHadDecay ) { 
+  if ( nllLFV_->measuredTauLepton().type() == kTauToHadDecay ) { 
     minimizer_->SetFixedVariable(
       kMNuNu, 
       std::string(TString::Format("leg%i::mNuNu", 1)).c_str(), 
@@ -112,7 +112,7 @@ SVfitStandaloneAlgorithmLFV::setup()
     std::string(TString::Format("leg%i::phi", 1)).c_str(), 
     0.0, 0.25);
   // start values for Pt and mass of visible tau decay products (hadronic tau decays only)
-  if ( nllLFV_->measuredTauLepton().type() == kHadDecay && shiftVisMassAndPt_ ) {
+  if ( nllLFV_->measuredTauLepton().type() == kTauToHadDecay && shiftVisMassAndPt_ ) {
     minimizer_->SetLimitedVariable(
       kVisMassShifted, 
       std::string(TString::Format("leg%i::mVisShift", 1)).c_str(), 
@@ -186,6 +186,7 @@ SVfitStandaloneAlgorithmLFV::fit()
   // do the minimization
   nllLFV_->addDelta(false);
   nllLFV_->addSinTheta(true);
+  nllLFV_->requirePhysicalSolution(false);
   minimizer_->Minimize();
   if ( verbose_ >= 2 ) { 
     minimizer_->PrintResults(); 
@@ -261,7 +262,7 @@ SVfitStandaloneAlgorithmLFV::integrateVEGAS(const std::string& likelihoodFileNam
   const TH1* lutVisPtRes = 0;
   for ( size_t idx = 0; idx < nll_->measuredTauLeptons().size(); ++idx ) {
     const MeasuredTauLepton& measuredTauLepton = nll_->measuredTauLeptons()[idx];
-    if ( measuredTauLepton.type() == kHadDecay ) { 
+    if ( measuredTauLepton.type() == kTauToHadDecay ) { 
       if ( measuredTauLepton.decayMode() == 0 ) {
 	lutVisMassRes = lutVisMassResDM0_;
 	lutVisPtRes = lutVisPtResDM0_;
@@ -274,7 +275,7 @@ SVfitStandaloneAlgorithmLFV::integrateVEGAS(const std::string& likelihoodFileNam
       } 
       if ( shiftVisMassAndPt_ ) nDim = 4;
       else nDim = 2;
-    } else if ( measuredTauLepton.type() == kLepDecay ) {
+    } else if ( measuredTauLepton.type() == kTauToElecDecay || measuredTauLepton.type() == kTauToMuDecay ) {
       isLep_ = true;
       nDim = 3;
     }
@@ -334,6 +335,7 @@ SVfitStandaloneAlgorithmLFV::integrateVEGAS(const std::string& likelihoodFileNam
   nllLFV_->addSinTheta(false);
   nllLFV_->addPhiPenalty(false);
   nllLFV_->shiftVisMassAndPt(shiftVisMassAndPt_, lutVisMassRes, lutVisPtRes);
+  nllLFV_->requirePhysicalSolution(true);
   int count = 0;
   double pMax = 0.;
   double mvis = measuredDiTauSystem().mass();
@@ -361,7 +363,7 @@ SVfitStandaloneAlgorithmLFV::integrateVEGAS(const std::string& likelihoodFileNam
 	count = 0;
       }
     }
-    double mtest_step = TMath::Max(2.5, 0.025*mtest);
+    double mtest_step = 0.025*mtest;
     int bin = histogramMass->FindBin(mtest);
     histogramMass->SetBinContent(bin, p*mtest_step);
     histogramMass->SetBinError(bin, pErr*mtest_step);
@@ -447,7 +449,7 @@ SVfitStandaloneAlgorithmLFV::integrateMarkovChain()
   const TH1* lutVisPtRes = 0;
   for ( size_t idx = 0; idx < nll_->measuredTauLeptons().size(); ++idx ) {
     const MeasuredTauLepton& measuredTauLepton = nll_->measuredTauLeptons()[idx];
-    if ( measuredTauLepton.type() == kHadDecay ) { 
+    if ( measuredTauLepton.type() == kTauToHadDecay ) { 
       if ( measuredTauLepton.decayMode() == 0 ) {
 	lutVisMassRes = lutVisMassResDM0_;
 	lutVisPtRes = lutVisPtResDM0_;
@@ -460,7 +462,7 @@ SVfitStandaloneAlgorithmLFV::integrateMarkovChain()
       }	
       if ( shiftVisMassAndPt_ ) nDim = 4;
       else nDim = 2;
-    } else if ( measuredTauLepton.type() == kLepDecay ) {
+    } else if ( measuredTauLepton.type() == kTauToElecDecay || measuredTauLepton.type() == kTauToMuDecay ) {
       isLep_ = true;
       nDim = 3;
     }
@@ -490,6 +492,7 @@ SVfitStandaloneAlgorithmLFV::integrateMarkovChain()
   std::vector<double> x0(nDim);
   std::vector<double> xl(nDim);
   std::vector<double> xh(nDim);
+std::cout << "nDim = " << nDim << std::endl;
   if ( isLep_ ) {
     x0[0] = 0.5; 
     xl[0] = 0.0; 
@@ -527,6 +530,7 @@ SVfitStandaloneAlgorithmLFV::integrateMarkovChain()
   nllLFV_->addSinTheta(false);
   nllLFV_->addPhiPenalty(false);
   nllLFV_->shiftVisMassAndPt(shiftVisMassAndPt_, lutVisMassRes, lutVisPtRes);
+  nllLFV_->requirePhysicalSolution(true);
   double integral = 0.;
   double integralErr = 0.;
   int errorFlag = 0;

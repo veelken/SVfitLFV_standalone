@@ -12,6 +12,9 @@
 #include <TH1.h>
 #include <TBenchmark.h>
 
+#include <gsl/gsl_monte.h>
+#include <gsl/gsl_monte_vegas.h>
+
 using svFitStandalone::Vector;
 using svFitStandalone::LorentzVector;
 using svFitStandalone::MeasuredTauLepton;
@@ -51,8 +54,8 @@ namespace svFitStandalone
   public:
     double Eval(const double* x) const // NOTE: return value = likelihood, **not** -log(likelihood)
     {
-      map_xVEGAS_LFV(x, isLep_, shiftVisMassAndPt_, mvis_, mtest_, x_mapped_);     
-      double prob = SVfitStandaloneLikelihoodLFV::gSVfitStandaloneLikelihoodLFV->prob(x_mapped_);      
+      map_xVEGAS_LFV(x, isLep_, shiftVisMassAndPt_, mvis_, mtest_, x_mapped_);  
+      double prob = SVfitStandaloneLikelihoodLFV::gSVfitStandaloneLikelihoodLFV->prob(x_mapped_, true, mtest_);      
       if ( TMath::IsNaN(prob) ) prob = 0.;
       return prob;
     }
@@ -100,8 +103,8 @@ namespace svFitStandalone
    private:    
     virtual double DoEval(const double* x) const
     {
-      map_xMarkovChain_LFV(x, isLep_, shiftVisMassAndPt_, x_mapped_);
-      SVfitStandaloneLikelihoodLFV::gSVfitStandaloneLikelihoodLFV->results(fittedTauLeptons_, x_mapped_);
+      map_xMarkovChain_LFV(x, isLep_, shiftVisMassAndPt_, x_mappedLFV_);
+      SVfitStandaloneLikelihoodLFV::gSVfitStandaloneLikelihoodLFV->results(fittedTauLeptons_, x_mappedLFV_);
       fittedDiTauSystem_ = fittedTauLeptons_[0] + fittedTauLeptons_[1];
       //std::cout << "<MCPtEtaPhiMassAdapterLFV::DoEval>" << std::endl;
       //std::cout << " Pt = " << fittedDiTauSystem_.pt() << "," 
@@ -114,20 +117,8 @@ namespace svFitStandalone
       histogramMass_->Fill(fittedDiTauSystem_.mass());
       return 0.;
     } 
-    mutable std::vector<svFitStandalone::LorentzVector> fittedTauLeptons_;
-    mutable LorentzVector fittedDiTauSystem_;
-    mutable TH1* histogramPt_;
-    mutable TH1* histogramPt_density_;
-    mutable TH1* histogramEta_;
-    mutable TH1* histogramEta_density_;
-    mutable TH1* histogramPhi_;
-    mutable TH1* histogramPhi_density_;
-    mutable TH1* histogramMass_;
-    mutable TH1* histogramMass_density_;
-    mutable double x_mapped_[5];
-    int nDim_;
+    mutable double x_mappedLFV_[5];
     bool isLep_;
-    bool shiftVisMassAndPt_;
   };
 }
 
@@ -223,6 +214,10 @@ class SVfitStandaloneAlgorithmLFV : public SVfitStandaloneAlgorithm
 
   /// needed for VEGAS integration
   svFitStandalone::ObjectiveFunctionAdapterVEGAS_LFV* standaloneObjectiveFunctionAdapterVEGAS_LFV_;   
+
+  gsl_monte_function* integrand_;
+  gsl_monte_vegas_state* workspace_;
+  mutable gsl_rng* rnd_;
 
   /// needed for markov chain integration
   svFitStandalone::MCObjectiveFunctionAdapterLFV* mcObjectiveFunctionAdapterLFV_;
