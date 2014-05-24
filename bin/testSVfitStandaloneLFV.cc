@@ -10,6 +10,7 @@
 */
 
 #include "TauAnalysis/SVfitStandaloneLFV/interface/SVfitStandaloneAlgorithmLFV.h"
+#include "FWCore/ParameterSet/interface/FileInPath.h"
 
 #include "TTree.h"
 #include "TFile.h"
@@ -49,7 +50,13 @@ void singleEvent()
   // define algorithm (set the debug level to 3 for testing)
   SVfitStandaloneAlgorithmLFV algo(measuredTauLeptons, MET, covMET, 2);
   algo.addLogM(false);
-  TFile* inputFile = new TFile("../../SVfitStandalone/data/svFitVisMassAndPtResolutionPDF.root");  
+  //TFile* inputFile = new TFile("../../SVfitStandalone/data/svFitVisMassAndPtResolutionPDF.root");  
+  edm::FileInPath inputFileName("TauAnalysis/SVfitStandalone/data/svFitVisMassAndPtResolutionPDF.root");
+  if ( !inputFileName.isLocal() ) {
+    std::cerr << "Error: Failed to find file = " << inputFileName << " !!" << std::endl;
+    assert(0);
+  }
+  TFile* inputFile = new TFile(inputFileName.fullPath().data());
   algo.shiftVisMassAndPt(true, inputFile);
   /* 
      the following lines show how to use the different methods on a single event
@@ -57,13 +64,13 @@ void singleEvent()
   // minuit fit method
   //algo.fit();
   // integration by VEGAS (default)
-  algo.integrateVEGAS();
+  //algo.integrateVEGAS();
   // integration by markov chain MC
-  //algo.integrateMarkovChain();
+  algo.integrateMarkovChain();
 
   double mass = algo.getMass(); // return value is in units of GeV
   if ( algo.isValidSolution() ) {
-    std::cout << "found mass = " << mass << " (expected value = 115.68)" << std::endl;
+    std::cout << "found mass = " << mass << " (expected value = 119.614)" << std::endl;
   } else {
     std::cout << "sorry -- status of NLL is not valid [" << algo.isValidSolution() << "]" << std::endl;
   }

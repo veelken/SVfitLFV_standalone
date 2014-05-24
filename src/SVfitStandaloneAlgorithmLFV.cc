@@ -222,9 +222,9 @@ SVfitStandaloneAlgorithmLFV::fit()
     std::cout << ">> -------------------------------------------------------------" << std::endl;
     std::cout << ">> Resonance Record: " << std::endl;
     std::cout << ">> -------------------------------------------------------------" << std::endl;
-    std::cout << ">> pt  (di-tau)    = " << fittedDiTauSystem().pt  () << std::endl;
-    std::cout << ">> eta (di-tau)    = " << fittedDiTauSystem().eta () << std::endl;
-    std::cout << ">> phi (di-tau)    = " << fittedDiTauSystem().phi () << std::endl;
+    std::cout << ">> pt  (di-tau)    = " << fittedDiTauSystem().pt()   << std::endl;
+    std::cout << ">> eta (di-tau)    = " << fittedDiTauSystem().eta()  << std::endl;
+    std::cout << ">> phi (di-tau)    = " << fittedDiTauSystem().phi()  << std::endl;
     std::cout << ">> mass(di-tau)    = " << fittedDiTauSystem().mass() << std::endl;  
     std::cout << ">> massUncert      = " << massUncert_ << std::endl
 	      << "   error[xFrac1]   = " << minimizer_->Errors()[kXFrac] << std::endl
@@ -235,10 +235,10 @@ SVfitStandaloneAlgorithmLFV::fit()
       std::cout << ">> -------------------------------------------------------------" << std::endl;
       std::cout << ">> Leg " << leg+1 << " Record: " << std::endl;
       std::cout << ">> -------------------------------------------------------------" << std::endl;
-      std::cout << ">> pt  (meas)      = " << nllLFV_->measuredTauLeptons()[leg].p4().pt () << std::endl;
-      std::cout << ">> eta (meas)      = " << nllLFV_->measuredTauLeptons()[leg].p4().eta() << std::endl;
-      std::cout << ">> phi (meas)      = " << nllLFV_->measuredTauLeptons()[leg].p4().phi() << std::endl; 
-      std::cout << ">> pt  (fit )      = " << fittedTauLeptons()[leg].pt () << std::endl;
+      std::cout << ">> pt  (meas)      = " << nllLFV_->measuredTauLeptons()[leg].pt() << std::endl;
+      std::cout << ">> eta (meas)      = " << nllLFV_->measuredTauLeptons()[leg].eta() << std::endl;
+      std::cout << ">> phi (meas)      = " << nllLFV_->measuredTauLeptons()[leg].phi() << std::endl; 
+      std::cout << ">> pt  (fit )      = " << fittedTauLeptons()[leg].pt()  << std::endl;
       std::cout << ">> eta (fit )      = " << fittedTauLeptons()[leg].eta() << std::endl;
       std::cout << ">> phi (fit )      = " << fittedTauLeptons()[leg].phi() << std::endl; 
     }
@@ -262,6 +262,10 @@ SVfitStandaloneAlgorithmLFV::integrateVEGAS(const std::string& likelihoodFileNam
   const TH1* lutVisPtRes = 0;
   for ( size_t idx = 0; idx < nllLFV_->measuredTauLeptons().size(); ++idx ) {
     const MeasuredTauLepton& measuredTauLepton = nllLFV_->measuredTauLeptons()[idx];
+    std::cout << "measuredTauLepton #" << idx << ": Pt = " << measuredTauLepton.pt() << ", eta = " << measuredTauLepton.eta() << ", phi = " << measuredTauLepton.phi() << "," 
+	      << " mass = " << measuredTauLepton.mass() << " (type = " << measuredTauLepton.type();
+    if ( measuredTauLepton.type() == kTauToHadDecay ) std::cout << ", decayMode = " << measuredTauLepton.decayMode();
+    std::cout << ")" << std::endl;
     if ( measuredTauLepton.type() == kTauToHadDecay ) { 
       if ( shiftVisMassAndPt_ ) {
 	if ( measuredTauLepton.decayMode() == 0 ) {
@@ -290,6 +294,7 @@ SVfitStandaloneAlgorithmLFV::integrateVEGAS(const std::string& likelihoodFileNam
   }
   nDim -= 1; // xFrac for tau is fixed by delta function for test mass
   std::cout << "nDim = " << nDim << std::endl;
+  assert(nDim > 0);  
 
   /* --------------------------------------------------------------------------------------
      lower and upper bounds for integration. Boundaries are defined for each decay channel
@@ -467,6 +472,10 @@ SVfitStandaloneAlgorithmLFV::integrateMarkovChain()
   const TH1* lutVisPtRes = 0;
   for ( size_t idx = 0; idx < nllLFV_->measuredTauLeptons().size(); ++idx ) {
     const MeasuredTauLepton& measuredTauLepton = nllLFV_->measuredTauLeptons()[idx];
+    std::cout << "measuredTauLepton #" << idx << ": Pt = " << measuredTauLepton.pt() << ", eta = " << measuredTauLepton.eta() << ", phi = " << measuredTauLepton.phi() << "," 
+	      << " mass = " << measuredTauLepton.mass() << " (type = " << measuredTauLepton.type();
+    if ( measuredTauLepton.type() == kTauToHadDecay ) std::cout << ", decayMode = " << measuredTauLepton.decayMode();
+    std::cout << ")" << std::endl;
     if ( measuredTauLepton.type() == kTauToHadDecay ) { 
       if ( shiftVisMassAndPt_ ) {
 	if ( measuredTauLepton.decayMode() == 0 ) {
@@ -493,7 +502,9 @@ SVfitStandaloneAlgorithmLFV::integrateMarkovChain()
       nDim = 3;
     }
   }
-  
+  std::cout << "nDim = " << nDim << std::endl;
+  assert(nDim > 0);
+
   if ( nDim != integrator2_nDim_ ) {
     mcObjectiveFunctionAdapterLFV_->SetNDim(nDim);    
     integrator2_->setIntegrand(*mcObjectiveFunctionAdapterLFV_);

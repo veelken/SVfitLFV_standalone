@@ -283,6 +283,8 @@ SVfitStandaloneLikelihoodLFV::prob(const double* xPrime, double phiPenalty) cons
     }
 #endif 
     break;
+  default :
+    break;
   }
   // add additional logM term if configured such 
   if ( addLogM_ ) {
