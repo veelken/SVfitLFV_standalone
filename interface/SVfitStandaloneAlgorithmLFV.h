@@ -48,41 +48,47 @@ namespace svFitStandalone
     }
   };
   // for VEGAS integration
-  void map_xVEGAS_LFV(const double*, bool, bool, double, double, double*);
+  void map_xVEGAS_LFV(const double*, bool, bool, bool, bool, double, double, double*);
   class ObjectiveFunctionAdapterVEGAS_LFV
   {
   public:
     double Eval(const double* x) const // NOTE: return value = likelihood, **not** -log(likelihood)
     {
-      map_xVEGAS_LFV(x, isLep_, shiftVisMassAndPt_, mvis_, mtest_, x_mapped_);  
+      map_xVEGAS_LFV(x, isLep_, marginalizeVisMass_, shiftVisMass_, shiftVisPt_, mvis_, mtest_, x_mapped_);  
       double prob = SVfitStandaloneLikelihoodLFV::gSVfitStandaloneLikelihoodLFV->prob(x_mapped_, true, mtest_);      
       if ( TMath::IsNaN(prob) ) prob = 0.;
       return prob;
     }
     void SetIsLep(bool isLep) { isLep_ = isLep; }
-    void SetShiftVisMassAndPt(bool shiftVisMassAndPt) { shiftVisMassAndPt_ = shiftVisMassAndPt; }
+    void SetMarginalizeVisMass(bool marginalizeVisMass) { marginalizeVisMass_ = marginalizeVisMass; }
+    void SetShiftVisMass(bool shiftVisMass) { shiftVisMass_ = shiftVisMass; }
+    void SetShiftVisPt(bool shiftVisPt) { shiftVisPt_ = shiftVisPt; }
     void SetMvis(double mvis) { mvis_ = mvis; }
     void SetMtest(double mtest) { mtest_ = mtest; }
   private:
     mutable double x_mapped_[5];
     bool isLep_;
-    bool shiftVisMassAndPt_;
+    bool marginalizeVisMass_;
+    bool shiftVisMass_;
+    bool shiftVisPt_;
     double mvis_;  // mass of visible tau decay products
     double mtest_; // current mass hypothesis
   };
   // for markov chain integration
-  void map_xMarkovChain_LFV(const double*, bool, bool, double*);
+  void map_xMarkovChain_LFV(const double*, bool, bool, bool, bool, double*);
   class MCObjectiveFunctionAdapterLFV : public ROOT::Math::Functor
   {
    public:
     void SetIsLep(bool isLep) { isLep_ = isLep; }
-    void SetShiftVisMassAndPt(bool shiftVisMassAndPt) { shiftVisMassAndPt_ = shiftVisMassAndPt; }
+    void SetMarginalizeVisMass(bool marginalizeVisMass) { marginalizeVisMass_ = marginalizeVisMass; }
+    void SetShiftVisMass(bool shiftVisMass) { shiftVisMass_ = shiftVisMass; }
+    void SetShiftVisPt(bool shiftVisPt) { shiftVisPt_ = shiftVisPt; }
     void SetNDim(int nDim) { nDim_ = nDim; }
     unsigned int NDim() const { return nDim_; }
    private:
     virtual double DoEval(const double* x) const
     {
-      map_xMarkovChain_LFV(x, isLep_, shiftVisMassAndPt_, x_mapped_);
+      map_xMarkovChain_LFV(x, isLep_, marginalizeVisMass_, shiftVisMass_, shiftVisPt_, x_mapped_);
       double prob = SVfitStandaloneLikelihoodLFV::gSVfitStandaloneLikelihoodLFV->prob(x_mapped_);
       if ( TMath::IsNaN(prob) ) prob = 0.;
       return prob;
@@ -90,7 +96,9 @@ namespace svFitStandalone
     mutable double x_mapped_[5];
     int nDim_;
     bool isLep_;
-    bool shiftVisMassAndPt_;
+    bool marginalizeVisMass_;
+    bool shiftVisMass_;
+    bool shiftVisPt_;
   };
   class MCPtEtaPhiMassAdapterLFV : public MCPtEtaPhiMassAdapter
   {
@@ -103,7 +111,7 @@ namespace svFitStandalone
    private:    
     virtual double DoEval(const double* x) const
     {
-      map_xMarkovChain_LFV(x, isLep_, shiftVisMassAndPt_, x_mappedLFV_);
+      map_xMarkovChain_LFV(x, isLep_, marginalizeVisMass_, shiftVisMass_, shiftVisPt_, x_mappedLFV_);
       SVfitStandaloneLikelihoodLFV::gSVfitStandaloneLikelihoodLFV->results(fittedTauLeptons_, x_mappedLFV_);
       fittedDiTauSystem_ = fittedTauLeptons_[0] + fittedTauLeptons_[1];
       //std::cout << "<MCPtEtaPhiMassAdapterLFV::DoEval>" << std::endl;

@@ -51,8 +51,12 @@ namespace svFitStandalone
     /// static pointer to this (needed for the minuit function calls)
     static const SVfitStandaloneLikelihoodLFV* gSVfitStandaloneLikelihoodLFV;
        
+    /// marginalize unknown mass of hadronic tau decay products (ATLAS case)
+    void marginalizeVisMass(bool value, const TH1* l1lutVisMass);  
+
     /// take resolution on energy and mass of hadronic tau decays into account
-    void shiftVisMassAndPt(bool value, const TH1* lutVisMassRes, const TH1* lutVisPtRes);    
+    void shiftVisMass(bool value, const TH1* lutVisMassRes);    
+    void shiftVisPt(bool value, const TH1* lutVisPtRes);    
 
     /// fit function to be called from outside. Has to be const to be usable by minuit. This function will call the actual 
     /// functions transform and prob internally 
@@ -85,6 +89,7 @@ namespace svFitStandalone
     MeasuredTauLepton measuredTauLepton_;
 
     /// resolution on energy and mass of hadronic taus
+    const TH1* lutVisMass_;  
     const TH1* lutVisMassRes_;
     const TH1* lutVisPtRes_;
   };

@@ -44,15 +44,38 @@ SVfitStandaloneLikelihoodLFV::SVfitStandaloneLikelihoodLFV(const std::vector<Mea
 }
 
 void 
-SVfitStandaloneLikelihoodLFV::shiftVisMassAndPt(bool value, const TH1* lutVisMassRes, const TH1* lutVisPtRes)
+SVfitStandaloneLikelihoodLFV::marginalizeVisMass(bool value, const TH1* lutVisMass)
 {
-  std::cout << "<SVfitStandaloneLikelihoodLFV::shiftVisMassAndPt>:" << std::endl;
-  if ( value ) std::cout << "enabling shiftVisMassAndPt: lutVisMassRes = " << lutVisMassRes << ", lutVisPtRes = " << lutVisPtRes << std::endl;
-  else std::cout << "disabling shiftVisMassAndPt" << lutVisPtRes << std::endl;
-  shiftVisMassAndPt_ = value;
-  if ( shiftVisMassAndPt_ ) {
+  //std::cout << "<SVfitStandaloneLikelihoodLFV::marginalizeVisMass>:" << std::endl;
+  //if ( value ) std::cout << "enabling marginalizeVisMass: lutVisMass = " << lutVisMass << std::endl;
+  //else std::cout << "disabling marginalizeVisMass" << std::endl;
+  marginalizeVisMass_ = value;
+  if ( marginalizeVisMass_ ) {
+    lutVisMass_ = lutVisMass;
+  }
+}
+
+void 
+SVfitStandaloneLikelihoodLFV::shiftVisMass(bool value, const TH1* lutVisMassRes)
+{
+  //std::cout << "<SVfitStandaloneLikelihoodLFV::shiftVisMass>:" << std::endl;
+  //if ( value ) std::cout << "enabling shiftVisMass: lutVisMassRes = " << lutVisMassRes << std::endl;
+  //else std::cout << "disabling shiftVisMass" << std::endl;
+  shiftVisMass_ = value;
+  if ( shiftVisMass_ ) {
     lutVisMassRes_ = lutVisMassRes;
-    lutVisPtRes_   = lutVisPtRes;
+  }
+}
+
+void 
+SVfitStandaloneLikelihoodLFV::shiftVisPt(bool value, const TH1* lutVisPtRes)
+{
+  std::cout << "<SVfitStandaloneLikelihoodLFV::shiftVisPt>:" << std::endl;
+  if ( value ) std::cout << "enabling shiftVisPt: lutVisPtRes = " << lutVisPtRes << std::endl;
+  else std::cout << "disabling shiftVisPt" << std::endl;
+  shiftVisPt_ = value;
+  if ( shiftVisPt_ ) {
+    lutVisPtRes_ = lutVisPtRes;
   }
 }
 
@@ -81,8 +104,10 @@ SVfitStandaloneLikelihoodLFV::transform(double* xPrime, const double* x, bool fi
     labframeXFrac = x[kXFrac];
     nunuMass = 0.;
     labframePhi = x[kPhi];
-    if ( shiftVisMassAndPt_ ) {
+    if ( marginalizeVisMass_ || shiftVisMass_ ) {
       visMass = x[kVisMassShifted];
+    }
+    if ( shiftVisPt_ ) {      
       double shiftInv = 1. + x[kRecTauPtDivGenTauPt];
       double shift = ( shiftInv > 1.e-1 ) ?
         (1./shiftInv) : 1.e+1;
@@ -148,7 +173,7 @@ SVfitStandaloneLikelihoodLFV::transform(double* xPrime, const double* x, bool fi
   xPrime[ kNuNuMass1            ] = nunuMass;
   xPrime[ kVisMass1             ] = visMass;
   xPrime[ kDecayAngle1          ] = gjAngle_rf;
-  xPrime[ kDeltaVisMass1        ] = visMass_unshifted - visMass;
+  xPrime[ kDeltaVisMass1        ] = ( marginalizeVisMass_ ) ? visMass : (visMass_unshifted - visMass);
   xPrime[ kRecTauPtDivGenTauPt1 ] = ( labframeVisMom > 0. ) ? (labframeVisMom_unshifted/labframeVisMom) : 1.e+3;
   xPrime[ kMaxNLLParams         ] = labframeXFrac;
   xPrime[ kMaxNLLParams + 1     ] = isValidSolution;
@@ -255,13 +280,25 @@ SVfitStandaloneLikelihoodLFV::prob(const double* xPrime, double phiPenalty) cons
 	      xPrime[kMaxNLLParams], 
 	      addSinTheta_, 
 	      (verbose_&& FIRST));
-    if ( shiftVisMassAndPt_ ) {
-      prob *= probVisMassAndPtShift(
+    assert(!(marginalizeVisMass_ && shiftVisMass_));
+    if ( marginalizeVisMass_ ) {
+      prob *= probVisMass(
 		xPrime[kDeltaVisMass1], 
-		xPrime[kRecTauPtDivGenTauPt1], 
-		lutVisMassRes_, lutVisPtRes_, 
+		lutVisMass_, 
 		(verbose_&& FIRST));
-      }
+    }
+    if ( shiftVisMass_ ) {
+      prob *= probVisMassShift(
+		xPrime[kDeltaVisMass1], 
+		lutVisMassRes_, 
+		(verbose_&& FIRST));
+    }
+    if ( shiftVisPt_ ) {
+      prob *= probVisPtShift(
+		xPrime[kRecTauPtDivGenTauPt1], 
+		lutVisPtRes_, 
+		(verbose_&& FIRST));
+    }
 #ifdef SVFIT_DEBUG 
     if ( verbose_ && FIRST ) {
       std::cout << " *probTauToHad  = " << prob << std::endl;
@@ -336,15 +373,19 @@ SVfitStandaloneLikelihoodLFV::results(std::vector<LorentzVector>& fittedTauLepto
   double labframeVisMom_unshifted = measuredTauLepton_.momentum(); 
   double labframeVisMom           = labframeVisMom_unshifted; // visible momentum in lab-frame
   double labframeVisEn            = measuredTauLepton_.energy(); // visible energy in lab-frame    
-  if ( measuredTauLepton_.type() == kTauToHadDecay && shiftVisMassAndPt_ ) {
-    visMass = x[kVisMassShifted];
-    double shiftInv = 1. + x[kRecTauPtDivGenTauPt];
-    double shift = ( shiftInv > 1.e-1 ) ?
-      (1./shiftInv) : 1.e+1;
-    labframeVisMom *= shift;
-    //visMass *= shift; // CV: take mass and momentum to be correlated
-    //labframeVisEn = TMath::Sqrt(labframeVisMom*labframeVisMom + visMass*visMass);
-    labframeVisEn *= shift;
+  if ( measuredTauLepton_.type() == kTauToHadDecay ) {
+    if ( marginalizeVisMass_ || shiftVisMass_ ) {
+      visMass = x[kVisMassShifted];
+    }
+    if ( shiftVisPt_ ) {
+      double shiftInv = 1. + x[kRecTauPtDivGenTauPt];
+      double shift = ( shiftInv > 1.e-1 ) ?
+        (1./shiftInv) : 1.e+1;
+      labframeVisMom *= shift;
+      //visMass *= shift; // CV: take mass and momentum to be correlated
+      //labframeVisEn = TMath::Sqrt(labframeVisMom*labframeVisMom + visMass*visMass);
+      labframeVisEn *= shift;
+    }
   }
   if ( visMass < 5.1e-4 ) { 
     visMass = 5.1e-4; 

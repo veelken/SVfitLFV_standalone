@@ -57,7 +57,8 @@ void singleEvent()
     assert(0);
   }
   TFile* inputFile = new TFile(inputFileName.fullPath().data());
-  algo.shiftVisMassAndPt(true, inputFile);
+  algo.shiftVisMass(true, inputFile);
+  algo.shiftVisPt(true, inputFile);
   /* 
      the following lines show how to use the different methods on a single event
   */
